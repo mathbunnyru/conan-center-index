@@ -45,23 +45,24 @@ class CernRootConan(ConanFile):
         # default python=off as there is currently no libpython in Conan center
         "python": PythonOption.OFF,
     }
+    exports_sources = ["CMakeLists.txt"]
     generators = ("cmake", "cmake_find_package")
     requires = (
         "opengl/system",
         "libxml2/2.9.10",
         "glu/system",
         "xorg/system",
-        "sqlite3/3.34.0",
+        "sqlite3/3.35.1",
         "libjpeg/9d",
         "libpng/1.6.37",
-        "libcurl/7.74.0",
+        "libcurl/7.75.0",
         "pcre/8.44",
         "xz_utils/5.2.5",
-        "zstd/1.4.8",
+        "zstd/1.4.9",
         "lz4/1.9.3",
-        "glew/2.1.0",
-        "openssl/1.1.1i",
-        "fftw/3.3.8",
+        "glew/2.2.0",
+        "openssl/1.1.1j",
+        "fftw/3.3.9",
         "cfitsio/3.490",
         "tbb/2020.3",
         "libpng/1.6.37",
@@ -119,7 +120,7 @@ class CernRootConan(ConanFile):
         compiler = self.settings.compiler
         libcxx = compiler.get_safe("libcxx")
         # ROOT doesn't currently build with libc++.
-        # This restriction may be lifted in future if the problems are fixed upstream 
+        # This restriction may be lifted in future if the problems are fixed upstream
         if libcxx and libcxx == "libc++":
             raise ConanInvalidConfiguration(
                 '{} is incompatible with libc++".'.format(self.name)
@@ -134,46 +135,13 @@ class CernRootConan(ConanFile):
 
     def _patch_source_cmake(self):
         try:
-            os.remove(
-                os.sep.join(
-                    (
-                        self.source_folder,
-                        self._source_subfolder,
-                        "cmake",
-                        "modules",
-                        "FindTBB.cmake",
-                    )
-                )
-            )
+            os.remove(os.path.join(
+                self.source_folder,
+                self._source_subfolder,
+                "cmake/modules/FindTBB.cmake"
+            ))
         except OSError:
             pass
-        # Conan generated cmake_find_packages names differ from
-        # names ROOT expects (usually only due to case differences)
-        # There is currently no way to change these names
-        # see: https://github.com/conan-io/conan/issues/4430
-        # Patch ROOT CMake to use Conan dependencies
-        tools.replace_in_file(
-            os.path.join(self.source_folder, self._source_subfolder, "CMakeLists.txt"),
-            "project(ROOT)",
-            "\n".join(
-                (
-                    "project(ROOT)",
-                    "# sets the current C runtime on MSVC (MT vs MD vd MTd vs MDd)",
-                    "include({}/conanbuildinfo.cmake)".format(
-                        self.install_folder.replace("\\", "/")
-                    ),
-                    "conan_basic_setup(NO_OUTPUT_DIRS)",
-                    "find_package(OpenSSL REQUIRED)",
-                    "set(OPENSSL_VERSION ${OpenSSL_VERSION})",
-                    "find_package(LibXml2 REQUIRED)",
-                    "set(LIBXML2_INCLUDE_DIR ${LibXml2_INCLUDE_DIR})",
-                    "set(LIBXML2_LIBRARIES ${LibXml2_LIBRARIES})",
-                    "find_package(SQLite3 REQUIRED)",
-                    "set(SQLITE_INCLUDE_DIR ${SQLITE3_INCLUDE_DIRS})",
-                    "set(SQLITE_LIBRARIES SQLite::SQLite3)",
-                )
-            ),
-        )
 
     def _fix_source_permissions(self):
         # Fix execute permissions on scripts
@@ -244,7 +212,7 @@ class CernRootConan(ConanFile):
                     # clad is built with ExternalProject_Add and its 
                     # COMPILE_DEFINITIONS property is not propagated causing the build to 
                     # fail on some systems if libcxx != libstdc++11
-                    "clad": "OFF", 
+                    "clad": "OFF",
                     # Tell CMake where to look for Conan provided depedencies
                     "CMAKE_LIBRARY_PATH": cmakelibpath.replace("\\", "/"),
                     "CMAKE_INCLUDE_PATH": cmakeincludepath.replace("\\", "/"),
@@ -254,7 +222,7 @@ class CernRootConan(ConanFile):
                     # resources get installed.
                     # Set install prefix to work around these limitations
                     # Following: https://github.com/conan-io/conan/issues/3695
-                    "CMAKE_INSTALL_PREFIX": os.sep.join((self.package_folder, "res")),
+                    "CMAKE_INSTALL_PREFIX": os.path.join(self.package_folder, "res"),
                     # Fix some Conan-ROOT CMake variable naming differences
                     "PNG_PNG_INCLUDE_DIR": ";".join(
                         self.deps_cpp_info["libpng"].include_paths
@@ -281,10 +249,7 @@ class CernRootConan(ConanFile):
 
     @property
     def _pyrootopt(self):
-        if self.options.python == PythonOption.OFF:
-            return "OFF"
-        else:
-            return "ON"
+        return "OFF" if self.options.python == PythonOption.OFF else "ON"
 
     def build(self):
         self._fix_source_permissions()
@@ -296,14 +261,14 @@ class CernRootConan(ConanFile):
         self.copy("LICENSE", dst="licenses", src=self._source_subfolder)
         for dir in ["include", "lib", "bin"]:
             os.symlink(
-                os.sep.join((self.package_folder, "res", dir)),
-                os.sep.join((self.package_folder, dir)),
+                os.path.join(self.package_folder, "res", dir),
+                os.path.join(self.package_folder, dir),
             )
         # Fix for CMAKE-MODULES-CONFIG-FILES (KB-H016)
         tools.remove_files_by_mask(self.package_folder, "*Config*.cmake")
         # Fix for CMAKE FILE NOT IN BUILD FOLDERS (KB-H019)
         os.remove(
-            os.sep.join((self.package_folder, "res", "tutorials", "CTestCustom.cmake"))
+            os.path.join(self.package_folder, "res", "tutorials", "CTestCustom.cmake")
         )
 
     def package_info(self):
